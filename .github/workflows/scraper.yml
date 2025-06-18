@@ -23,6 +23,13 @@ jobs:
     - name: Checkout código
       uses: actions/checkout@v4
       
+    - name: Verificar estructura del proyecto
+      run: |
+        echo "📁 Estructura del proyecto:"
+        ls -la
+        echo "📁 Contenido del directorio raíz:"
+        find . -maxdepth 1 -type f
+        
     - name: Descargar archivo de estado anterior
       uses: actions/download-artifact@v4
       with:
@@ -61,8 +68,12 @@ jobs:
     - name: Instalar dependencias de Python
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pytest pytest-selenium pytest-timeout
+        if [ -f requirements.txt ]; then
+          pip install -r requirements.txt
+        else
+          echo "⚠️ No se encontró requirements.txt, instalando dependencias básicas"
+          pip install selenium==4.15.2 pandas==2.1.4 webdriver-manager==4.0.1 lxml==4.9.3 openpyxl==3.1.2 requests==2.31.0 beautifulsoup4==4.12.2 python-dotenv==1.0.0 pytest==7.4.3 pytest-selenium==4.0.2 pytest-timeout==2.2.0 urllib3==2.0.7
+        fi
         
     - name: Verificar archivo de estado
       run: |
@@ -70,8 +81,9 @@ jobs:
           echo "📁 Archivo de estado encontrado"
           ls -la sent_matches.json
         else
-          echo "📁 No se encontró archivo de estado anterior"
+          echo "📁 No se encontró archivo de estado anterior, creando uno nuevo"
           echo "{}" > sent_matches.json
+          ls -la sent_matches.json
         fi
         
     - name: Ejecutar scraper
@@ -94,12 +106,13 @@ jobs:
         ls -la *.json || echo "No se generaron archivos JSON"
         
     - name: Subir archivo de estado actualizado
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: scraper-state
         path: sent_matches.json
         retention-days: 7
-      if: always()
+        if-no-files-found: warn
       
     - name: Notificar error
       if: failure()
