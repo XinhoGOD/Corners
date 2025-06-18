@@ -1,0 +1,93 @@
+name: NowGoal Scraper
+
+on:
+  # Ejecutar cada 15 minutos entre las 8:00 y 23:00 UTC
+  schedule:
+    - cron: '0,15,30,45 8-23 * * *'
+  
+  # Permitir ejecución manual
+  workflow_dispatch:
+    inputs:
+      debug_mode:
+        description: 'Activar modo debug'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  scraping:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 🛒 Checkout code
+      uses: actions/checkout@v4
+    
+    - name: 🐍 Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    
+    - name: 📦 Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: 🌐 Install Chrome and ChromeDriver
+      run: |
+        # Instalar Chrome
+        wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+        sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
+        sudo apt-get update
+        sudo apt-get install -y google-chrome-stable
+        
+        # Verificar versión de Chrome
+        google-chrome --version
+        
+        # ChromeDriver se instala automáticamente con selenium-manager
+    
+    - name: 🔧 Configure display for headless browser
+      run: |
+        export DISPLAY=:99
+        sudo Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+    
+    - name: 🚀 Run NowGoal Scraper
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        DEBUG_MODE: ${{ github.event.inputs.debug_mode }}
+      run: |
+        echo "🚀 Iniciando scraper de NowGoal..."
+        echo "📅 Fecha y hora: $(date)"
+        echo "🔧 Modo debug: ${DEBUG_MODE:-false}"
+        
+        # Ejecutar el scraper principal
+        python telegram.py
+    
+    - name: 📊 Upload logs (if available)
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: scraper-logs-${{ github.run_number }}
+        path: |
+          *.log
+          *.json
+          logs/
+        retention-days: 7
+
+  health-check:
+    runs-on: ubuntu-latest
+    needs: scraping
+    if: always()
+    
+    steps:
+    - name: 🏥 Health Check Notification
+      if: failure()
+      run: |
+        echo "❌ El scraper falló. Se debería enviar una notificación de error."
+        # Aquí podrías agregar lógica para enviar una alerta de fallo
+    
+    - name: ✅ Success Notification
+      if: success()
+      run: |
+        echo "✅ Scraper ejecutado correctamente."

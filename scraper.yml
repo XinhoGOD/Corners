@@ -1,0 +1,82 @@
+name: NowGoal Scraper
+
+on:
+  schedule:
+    # Ejecutar cada 15 minutos durante los horarios típicos de partidos
+    - cron: '*/15 8-23 * * *'  # Cada 15 minutos de 8:00 a 23:00 UTC
+  workflow_dispatch:  # Permite ejecutar manualmente
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v4
+      
+    - name: Descargar archivo de estado anterior
+      uses: actions/download-artifact@v3
+      with:
+        name: scraper-state
+        path: .
+      continue-on-error: true
+      
+    - name: Configurar Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Instalar dependencias del sistema
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y wget gnupg unzip
+        
+    - name: Instalar Chrome
+      run: |
+        wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+        echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+        sudo apt-get update
+        sudo apt-get install -y google-chrome-stable
+        
+    - name: Instalar ChromeDriver
+      run: |
+        CHROME_VERSION=$(google-chrome --version | cut -d ' ' -f3 | cut -d '.' -f1-3)
+        LATEST_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_VERSION}")
+        wget -O /tmp/chromedriver.zip "https://chromedriver.storage.googleapis.com/${LATEST_VERSION}/chromedriver_linux64.zip"
+        sudo unzip /tmp/chromedriver.zip -d /usr/local/bin/
+        sudo chmod +x /usr/local/bin/chromedriver
+        
+    - name: Instalar dependencias de Python
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Verificar archivo de estado
+      run: |
+        if [ -f sent_matches.json ]; then
+          echo "📁 Archivo de estado encontrado"
+          ls -la sent_matches.json
+        else
+          echo "📁 No se encontró archivo de estado anterior"
+        fi
+        
+    - name: Ejecutar scraper
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        GITHUB_ACTIONS: true
+      run: |
+        python telegram.py
+        
+    - name: Verificar resultados
+      run: |
+        echo "📊 Archivos generados:"
+        ls -la *.json || echo "No se generaron archivos JSON"
+        
+    - name: Subir archivo de estado actualizado
+      uses: actions/upload-artifact@v3
+      with:
+        name: scraper-state
+        path: sent_matches.json
+        retention-days: 7
+      if: always()
