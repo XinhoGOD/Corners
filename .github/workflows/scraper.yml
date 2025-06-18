@@ -24,7 +24,7 @@ jobs:
       uses: actions/checkout@v4
       
     - name: Descargar archivo de estado anterior
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: scraper-state
         path: .
@@ -94,7 +94,7 @@ jobs:
         ls -la *.json || echo "No se generaron archivos JSON"
         
     - name: Subir archivo de estado actualizado
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: scraper-state
         path: sent_matches.json
