@@ -79,12 +79,11 @@ jobs:
         
     - name: Instalar ChromeDriver
       run: |
-        CHROME_VERSION=$(google-chrome --version | cut -d ' ' -f3 | cut -d '.' -f1-3)
-        LATEST_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_VERSION}")
-        wget -O /tmp/chromedriver.zip "https://chromedriver.storage.googleapis.com/${LATEST_VERSION}/chromedriver_linux64.zip"
+        # Instalar una versión específica de ChromeDriver
+        CHROMEDRIVER_VERSION="114.0.5735.90"
+        wget -O /tmp/chromedriver.zip "https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip"
         sudo unzip /tmp/chromedriver.zip -d /usr/local/bin/
         sudo chmod +x /usr/local/bin/chromedriver
-        echo "Chrome version: $(google-chrome --version)"
         echo "ChromeDriver version: $(chromedriver --version)"
         
     - name: Instalar dependencias de Python
