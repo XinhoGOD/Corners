@@ -3,7 +3,7 @@ name: NowGoal Scraper
 on:
   # Ejecutar cada 15 minutos entre las 8:00 y 23:00 UTC
   schedule:
-    - cron: '0,15,30,45 8-23 * * *'
+    - cron: '*/15 8-23 * * *'
   
   # Permitir ejecución manual
   workflow_dispatch:
@@ -15,76 +15,93 @@ on:
         type: boolean
 
 jobs:
-  scraping:
+  scrape:
     runs-on: ubuntu-latest
-      steps:
-    - name: 🛒 Checkout code
-      uses: actions/checkout@v4
+    timeout-minutes: 30
     
-    - name: 🐍 Set up Python
-      uses: actions/setup-python@v5
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v4
+      
+    - name: Descargar archivo de estado anterior
+      uses: actions/download-artifact@v3
+      with:
+        name: scraper-state
+        path: .
+      continue-on-error: true
+      
+    - name: Configurar Python
+      uses: actions/setup-python@v4
       with:
         python-version: '3.11'
         cache: 'pip'
-    
-    - name: 📦 Install dependencies
+        
+    - name: Instalar dependencias del sistema
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y wget gnupg unzip xvfb
+        
+    - name: Instalar Chrome
+      run: |
+        wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+        echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+        sudo apt-get update
+        sudo apt-get install -y google-chrome-stable
+        
+    - name: Instalar ChromeDriver
+      run: |
+        CHROME_VERSION=$(google-chrome --version | cut -d ' ' -f3 | cut -d '.' -f1-3)
+        LATEST_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_VERSION}")
+        wget -O /tmp/chromedriver.zip "https://chromedriver.storage.googleapis.com/${LATEST_VERSION}/chromedriver_linux64.zip"
+        sudo unzip /tmp/chromedriver.zip -d /usr/local/bin/
+        sudo chmod +x /usr/local/bin/chromedriver
+        echo "Chrome version: $(google-chrome --version)"
+        echo "ChromeDriver version: $(chromedriver --version)"
+        
+    - name: Instalar dependencias de Python
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-    
-    - name: 🌐 Install Chrome and ChromeDriver
-      run: |
-        # Instalar Chrome
-        wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-        sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
-        sudo apt-get update
-        sudo apt-get install -y google-chrome-stable
-          # Verificar versión de Chrome
-        google-chrome --version
+        pip install pytest pytest-selenium pytest-timeout
         
-        # ChromeDriver se instala automáticamente con selenium-manager
-    
-    - name: 🔧 Configure display for headless browser
+    - name: Verificar archivo de estado
       run: |
-        export DISPLAY=:99
-        sudo Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
-    
-    - name: 🚀 Run NowGoal Scraper
+        if [ -f sent_matches.json ]; then
+          echo "📁 Archivo de estado encontrado"
+          ls -la sent_matches.json
+        else
+          echo "📁 No se encontró archivo de estado anterior"
+          echo "{}" > sent_matches.json
+        fi
+        
+    - name: Ejecutar scraper
       env:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        DEBUG_MODE: ${{ github.event.inputs.debug_mode }}
+        GITHUB_ACTIONS: true
+        DISPLAY: :99
       run: |
-        echo "🚀 Iniciando scraper de NowGoal..."
-        echo "📅 Fecha y hora: $(date)"
-        echo "🔧 Modo debug: ${DEBUG_MODE:-false}"
+        Xvfb :99 -screen 0 1024x768x16 &
+        sleep 3
+        python telegram.py || {
+          echo "❌ Error al ejecutar el scraper"
+          exit 1
+        }
         
-        # Ejecutar el scraper principal
-        python main.py
-      - name: 📊 Upload logs (if available)
-      if: always()
-      uses: actions/upload-artifact@v4
+    - name: Verificar resultados
+      run: |
+        echo "📊 Archivos generados:"
+        ls -la *.json || echo "No se generaron archivos JSON"
+        
+    - name: Subir archivo de estado actualizado
+      uses: actions/upload-artifact@v3
       with:
-        name: scraper-logs-${{ github.run_number }}
-        path: |
-          *.log
-          *.json
-          logs/
+        name: scraper-state
+        path: sent_matches.json
         retention-days: 7
-
-  health-check:
-    runs-on: ubuntu-latest
-    needs: scraping
-    if: always()
-    
-    steps:
-    - name: 🏥 Health Check Notification
+      if: always()
+      
+    - name: Notificar error
       if: failure()
       run: |
-        echo "❌ El scraper falló. Se debería enviar una notificación de error."
-        # Aquí podrías agregar lógica para enviar una alerta de fallo
-    
-    - name: ✅ Success Notification
-      if: success()
-      run: |
-        echo "✅ Scraper ejecutado correctamente."
+        echo "❌ El workflow ha fallado. Por favor, revisa los logs para más detalles."
