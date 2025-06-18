@@ -21,9 +21,8 @@ jobs:
     steps:
     - name: 🛒 Checkout code
       uses: actions/checkout@v4
-    
-    - name: 🐍 Set up Python
-      uses: actions/setup-python@v4
+      - name: 🐍 Set up Python
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
         cache: 'pip'
@@ -62,10 +61,9 @@ jobs:
         
         # Ejecutar el scraper principal
         python main.py
-    
-    - name: 📊 Upload logs (if available)
+      - name: 📊 Upload logs (if available)
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: scraper-logs-${{ github.run_number }}
         path: |
