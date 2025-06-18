@@ -45,12 +45,12 @@ jobs:
         google-chrome --version
         
         # ChromeDriver se instala automáticamente con selenium-manager
-    
-    - name: 🔧 Configure display for headless browser
+      - name: 🔧 Configure display for headless browser
       run: |
         export DISPLAY=:99
         sudo Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
-      - name: 🚀 Run NowGoal Scraper
+    
+    - name: 🚀 Run NowGoal Scraper
       env:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
