@@ -75,20 +75,18 @@ jobs:
           cat requirements.txt
         else
           echo "📦 Creando requirements.txt con dependencias básicas"
-          cat > requirements.txt << EOL
-selenium==4.15.2
-pandas==2.1.4
-webdriver-manager==4.0.1
-lxml==4.9.3
-openpyxl==3.1.2
-requests==2.31.0
-beautifulsoup4==4.12.2
-python-dotenv==1.0.0
-pytest==7.4.3
-pytest-selenium==4.0.2
-pytest-timeout==2.2.0
-urllib3==2.0.7
-EOL
+          echo "selenium==4.15.2" > requirements.txt
+          echo "pandas==2.1.4" >> requirements.txt
+          echo "webdriver-manager==4.0.1" >> requirements.txt
+          echo "lxml==4.9.3" >> requirements.txt
+          echo "openpyxl==3.1.2" >> requirements.txt
+          echo "requests==2.31.0" >> requirements.txt
+          echo "beautifulsoup4==4.12.2" >> requirements.txt
+          echo "python-dotenv==1.0.0" >> requirements.txt
+          echo "pytest==7.4.3" >> requirements.txt
+          echo "pytest-selenium==4.0.2" >> requirements.txt
+          echo "pytest-timeout==2.2.0" >> requirements.txt
+          echo "urllib3==2.0.7" >> requirements.txt
         fi
         
     - name: Instalar dependencias de Python
