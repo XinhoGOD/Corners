@@ -643,9 +643,11 @@ class NowGoalScraper:
     def generate_match_hash(self, match):
         """
         Genera un hash único para identificar un partido específico.
+        Solo usa los equipos para evitar duplicados cuando cambia el minuto o marcador.
         """
-        # Crear un identificador único basado en equipos, minuto y marcador
-        match_key = f"{match.get('home_team', '')}_{match.get('away_team', '')}_{match.get('minute_actual', '')}_{match.get('score', '')}"
+        # Crear un identificador único basado únicamente en los equipos
+        # Esto evita que se envíen mensajes duplicados cuando cambia el minuto o marcador
+        match_key = f"{match.get('home_team', '')}_{match.get('away_team', '')}"
         return hashlib.md5(match_key.encode()).hexdigest()
 
     def load_sent_matches(self):
@@ -684,6 +686,20 @@ class NowGoalScraper:
                 cleaned_matches[match_hash] = timestamp
                 
         return cleaned_matches
+
+    def reset_sent_matches(self):
+        """
+        Resetea completamente el archivo de partidos enviados.
+        Útil para limpiar el historial cuando se cambia la lógica de detección de duplicados.
+        """
+        try:
+            if os.path.exists(self.sent_matches_file):
+                os.remove(self.sent_matches_file)
+                print("✅ Archivo de partidos enviados reseteado correctamente")
+            else:
+                print("ℹ️ No existe archivo de partidos enviados para resetear")
+        except Exception as e:
+            print(f"❌ Error al resetear archivo de partidos enviados: {e}")
 
     def filter_unsent_matches(self, matches):
         """
@@ -791,6 +807,10 @@ def main():
         min_minute=MIN_MINUTE_FILTER,
         max_minute=MAX_MINUTE_FILTER
     )
+
+    # Opción para resetear el historial de partidos enviados
+    # Descomenta la siguiente línea si quieres limpiar el historial
+    # scraper.reset_sent_matches()
 
     scraper.run_scraping(export_json=True, send_telegram=True)
 
