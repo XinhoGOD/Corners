@@ -6,9 +6,9 @@ Este proyecto es un scraper automático para NowGoal.com que identifica partidos
 
 El scraper busca partidos que cumplan **TODOS** estos criterios:
 - **Minuto del partido**: Entre 30-60 minutos (incluye medio tiempo)
-- **Situación del marcador**: 
-  - Un equipo pierde por exactamente 1 gol Y tiene igual o más córners que el rival, O
-  - El partido está empatado Y al menos un equipo tiene córners
+- **Situación del marcador**: Un equipo pierde por máximo 1 gol
+- **Córners**: El equipo perdiendo tiene al menos 4 córners a favor
+- **Activador**: La diferencia de córners actúa como confirmador del envío
 - **Estado**: Partido en progreso (no finalizado)
 
 ## 🚀 Configuración para GitHub Actions
@@ -104,6 +104,11 @@ Edita `telegram.py`, función `main()`:
 ```python
 MIN_MINUTE_FILTER = 30  # Minuto mínimo
 MAX_MINUTE_FILTER = 60  # Minuto máximo
+```
+
+Para cambiar el número mínimo de córners, edita `telegram.py`, función `main()`:
+```python
+MIN_CORNERS_FILTER = 4  # Cambiar 4 por el número deseado
 ```
 
 ### Ajustar tiempo anti-duplicados

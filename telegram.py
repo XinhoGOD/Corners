@@ -24,7 +24,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.service import Service
 
 class NowGoalScraper:
-    def __init__(self, headless=False, min_minute=30, max_minute=60):
+    def __init__(self, headless=False, min_minute=30, max_minute=60, min_corners=4):
         """
         Inicializa el scraper
 
@@ -32,11 +32,13 @@ class NowGoalScraper:
             headless (bool): Si True, ejecuta el navegador sin interfaz gráfica
             min_minute (int): Minuto mínimo para el filtro de partidos.
             max_minute (int): Minuto máximo para el filtro de partidos.
+            min_corners (int): Número mínimo de córners que debe tener el equipo perdiendo.
         """
         self.driver = None
         self.headless = headless
         self.min_minute = min_minute
         self.max_minute = max_minute
+        self.min_corners = min_corners
         self.base_url = "https://www.nowgoal.com/"
         self.sent_matches_file = "sent_matches.json"
 
@@ -353,9 +355,9 @@ class NowGoalScraper:
             # print(f"DEBUG: Error general al parsear fila de partido para liga {current_league}: {e}")
             return None
 
-    def is_losing_or_drawing_with_more_corners(self, match):
+    def is_losing_with_corner_advantage(self, match):
         """
-        Determina si un equipo va perdiendo por 1 gol o empatando y tiene igual o más córners que el rival,
+        Determina si un equipo va perdiendo por máximo 1 gol y tiene al menos 4 córners a favor,
         y si el partido está en el rango de minutos especificado.
 
         Args:
@@ -399,31 +401,25 @@ class NowGoalScraper:
         except ValueError:
             return False, "Córners inválidos o no numéricos"
 
-        # Lógica del filtro: equipo perdiendo por 1 gol o empatando con igual o más córners
+        # Nueva lógica del filtro: equipo perdiendo por máximo 1 gol con al menos 4 córners a favor
         
-        # Caso 1: Equipo local perdiendo por 1 gol
-        if home_goals < away_goals and (away_goals - home_goals) == 1:
-            if home_corners >= away_corners:
-                return True, f"Local pierde por 1 gol ({home_goals}-{away_goals}) con ≥ córners ({home_corners}-{away_corners})"
+        # Caso 1: Equipo local perdiendo por máximo 1 gol
+        if home_goals < away_goals and (away_goals - home_goals) <= 1:
+            if home_corners >= self.min_corners:  # Al menos min_corners córners a favor
+                corner_diff = home_corners - away_corners
+                return True, f"Local pierde por {away_goals - home_goals} gol(s) ({home_goals}-{away_goals}) con {home_corners} córners (+{corner_diff} diferencia)"
             else:
-                return False, f"Local pierde por 1 gol ({home_goals}-{away_goals}) con < córners ({home_corners}-{away_corners})"
+                return False, f"Local pierde por {away_goals - home_goals} gol(s) pero solo tiene {home_corners} córners (< {self.min_corners} requeridos)"
         
-        # Caso 2: Equipo visitante perdiendo por 1 gol
-        elif away_goals < home_goals and (home_goals - away_goals) == 1:
-            if away_corners >= home_corners:
-                return True, f"Visitante pierde por 1 gol ({home_goals}-{away_goals}) con ≥ córners ({home_corners}-{away_corners})"
+        # Caso 2: Equipo visitante perdiendo por máximo 1 gol
+        elif away_goals < home_goals and (home_goals - away_goals) <= 1:
+            if away_corners >= self.min_corners:  # Al menos min_corners córners a favor
+                corner_diff = away_corners - home_corners
+                return True, f"Visitante pierde por {home_goals - away_goals} gol(s) ({home_goals}-{away_goals}) con {away_corners} córners (+{corner_diff} diferencia)"
             else:
-                return False, f"Visitante pierde por 1 gol ({home_goals}-{away_goals}) con < córners ({home_corners}-{away_corners})"
+                return False, f"Visitante pierde por {home_goals - away_goals} gol(s) pero solo tiene {away_corners} córners (< {self.min_corners} requeridos)"
         
-        # Caso 3: Empate
-        elif home_goals == away_goals:
-            # En caso de empate, si al menos un equipo tiene igual o más córners que el otro, pasa el filtro.
-            if home_corners >= away_corners or away_corners >= home_corners: 
-                return True, f"Empate ({home_goals}-{away_goals}), Córners ({home_corners}-{away_corners})"
-            else:
-                return False, f"Empate ({home_goals}-{away_goals}), córners no válidos ({home_corners}-{away_corners})"
-        
-        return False, "Condición de marcador/córners no cubierta"
+        return False, "No cumple criterio: no está perdiendo por máximo 1 gol o no tiene suficientes córners"
 
 
     def display_matches(self, matches_to_display):
@@ -434,14 +430,14 @@ class NowGoalScraper:
         """
         if not matches_to_display:
             print("\n" + "="*100)
-            print("❌ No se encontraron partidos que cumplan el criterio de perdedor/empatado con más/igual córners "
+            print(f"❌ No se encontraron partidos que cumplan el criterio de perdedor por máximo 1 gol con ≥{self.min_corners} córners "
                   f"(min. {self.min_minute}-{self.max_minute}).")
             print("="*100)
             return
 
         print("\n" + "="*100)
         print(f"⚽ ALERTA: PARTIDOS EN VIVO - NOWGOAL.COM")
-        print(f"   Criterio: Equipo Empatado/Perdiendo con ≥ Córners")
+        print(f"   Criterio: Equipo Perdiendo por máximo 1 gol con ≥{self.min_corners} córners a favor")
         print(f"   Rango de Minutos: {self.min_minute}-{self.max_minute}")
         print("="*100)
 
@@ -481,7 +477,7 @@ class NowGoalScraper:
         print(f"\n📊 Total de partidos que cumplen el criterio (min. {self.min_minute}-{self.max_minute}): {displayed_count}")
         print("="*100)
 
-    def export_to_json(self, matches_to_export, filename="nowgoal_matches_losing_or_drawing_more_corners_filtered.json"):
+    def export_to_json(self, matches_to_export, filename="nowgoal_matches_losing_with_corner_advantage.json"):
         """Exporta solo los partidos que cumplen el criterio a un archivo JSON"""
         try:
             if not matches_to_export:
@@ -536,8 +532,9 @@ class NowGoalScraper:
         header_message = (
             "🎯 *NOWGOAL ALERTA DE PARTIDOS EN VIVO*\n\n"
             "📋 *Criterios:*\n"
-            "• Equipo perdiendo por 1 gol o empatado\n"
-            "• Con igual o más córners que el rival\n"
+            "• Equipo perdiendo por máximo 1 gol\n"
+            f"• Con al menos {self.min_corners} córners a favor\n"
+            "• Diferencia de córners como activador\n"
             f"• Minuto: {self._escape_telegram_markdown_v2(f'{self.min_minute}-{self.max_minute}')}\n\n"
             f"⏰ Reporte: {self._escape_telegram_markdown_v2(time.strftime('%Y-%m-%d %H:%M:%S'))}"
         )
@@ -643,11 +640,20 @@ class NowGoalScraper:
     def generate_match_hash(self, match):
         """
         Genera un hash único para identificar un partido específico.
-        Solo usa los equipos para evitar duplicados cuando cambia el minuto o marcador.
+        Incluye equipos, liga y fecha para mayor precisión.
         """
-        # Crear un identificador único basado únicamente en los equipos
-        # Esto evita que se envíen mensajes duplicados cuando cambia el minuto o marcador
-        match_key = f"{match.get('home_team', '')}_{match.get('away_team', '')}"
+        # Crear un identificador único más específico
+        home_team = match.get('home_team', '').strip()
+        away_team = match.get('away_team', '').strip()
+        league = match.get('league', '').strip()
+        
+        # Normalizar nombres de equipos para evitar variaciones
+        home_team = re.sub(r'[^\w\s]', '', home_team).lower().strip()
+        away_team = re.sub(r'[^\w\s]', '', away_team).lower().strip()
+        league = re.sub(r'[^\w\s]', '', league).lower().strip()
+        
+        # Crear hash con equipos y liga
+        match_key = f"{home_team}_{away_team}_{league}"
         return hashlib.md5(match_key.encode()).hexdigest()
 
     def load_sent_matches(self):
@@ -673,17 +679,25 @@ class NowGoalScraper:
         except Exception as e:
             print(f"❌ Error al guardar archivo de partidos enviados: {e}")
 
-    def clean_old_sent_matches(self, sent_matches, hours_to_keep=6):
+    def clean_old_sent_matches(self, sent_matches, hours_to_keep=24):
         """
         Limpia los registros de partidos enviados que son muy antiguos.
+        Aumentado a 24 horas para evitar duplicados en partidos largos.
         """
         current_time = time.time()
-        cutoff_time = current_time - (hours_to_keep * 3600)  # 6 horas en segundos
+        cutoff_time = current_time - (hours_to_keep * 3600)  # 24 horas en segundos
         
         cleaned_matches = {}
+        removed_count = 0
+        
         for match_hash, timestamp in sent_matches.items():
             if timestamp > cutoff_time:
                 cleaned_matches[match_hash] = timestamp
+            else:
+                removed_count += 1
+                
+        if removed_count > 0:
+            print(f"🧹 Limpieza automática: {removed_count} registros antiguos eliminados")
                 
         return cleaned_matches
 
@@ -701,26 +715,79 @@ class NowGoalScraper:
         except Exception as e:
             print(f"❌ Error al resetear archivo de partidos enviados: {e}")
 
+    def show_sent_matches_status(self):
+        """
+        Muestra el estado actual del historial de partidos enviados.
+        """
+        try:
+            sent_matches = self.load_sent_matches()
+            current_time = time.time()
+            
+            if not sent_matches:
+                print("📋 Historial de partidos enviados: VACÍO")
+                return
+            
+            print(f"📋 Historial de partidos enviados ({len(sent_matches)} registros):")
+            print("-" * 80)
+            
+            # Ordenar por tiempo (más recientes primero)
+            sorted_matches = sorted(sent_matches.items(), key=lambda x: x[1], reverse=True)
+            
+            for i, (match_hash, timestamp) in enumerate(sorted_matches[:10], 1):  # Mostrar solo los 10 más recientes
+                time_diff = current_time - timestamp
+                hours_diff = time_diff / 3600
+                
+                if hours_diff < 1:
+                    time_str = f"{time_diff/60:.0f}min"
+                else:
+                    time_str = f"{hours_diff:.1f}h"
+                
+                print(f"   {i:2d}. Hash: {match_hash[:8]}... (enviado hace {time_str})")
+            
+            if len(sorted_matches) > 10:
+                print(f"   ... y {len(sorted_matches) - 10} registros más antiguos")
+                
+        except Exception as e:
+            print(f"❌ Error al mostrar estado del historial: {e}")
+
     def filter_unsent_matches(self, matches):
         """
         Filtra solo los partidos que no han sido enviados recientemente.
+        Sistema mejorado anti-duplicados.
         """
         sent_matches = self.load_sent_matches()
         sent_matches = self.clean_old_sent_matches(sent_matches)
         
         unsent_matches = []
         current_time = time.time()
+        duplicate_count = 0
+        
+        print(f"🔍 Verificando {len(matches)} partidos contra historial de duplicados...")
         
         for match in matches:
             match_hash = self.generate_match_hash(match)
+            home_team = match.get('home_team', 'N/A')
+            away_team = match.get('away_team', 'N/A')
             
-            # Si el partido no ha sido enviado o fue enviado hace más de 1 hora
-            if match_hash not in sent_matches or (current_time - sent_matches[match_hash]) > 3600:
-                unsent_matches.append(match)
-                sent_matches[match_hash] = current_time
+            # Verificar si ya fue enviado
+            if match_hash in sent_matches:
+                last_sent_time = sent_matches[match_hash]
+                time_diff = current_time - last_sent_time
+                hours_diff = time_diff / 3600
+                
+                print(f"   ⚠️ Duplicado detectado: {home_team} vs {away_team} (enviado hace {hours_diff:.1f}h)")
+                duplicate_count += 1
+                continue
+            
+            # Si no ha sido enviado, agregarlo a la lista
+            unsent_matches.append(match)
+            sent_matches[match_hash] = current_time
+            print(f"   ✅ Nuevo: {home_team} vs {away_team}")
                 
         # Guardar los partidos actualizados
         self.save_sent_matches(sent_matches)
+        
+        print(f"📊 Resumen: {len(unsent_matches)} nuevos, {duplicate_count} duplicados filtrados")
         
         return unsent_matches
 
@@ -738,7 +805,7 @@ class NowGoalScraper:
             if all_matches:
                 filtered_matches = []
                 for match in all_matches:
-                    is_relevant, reason = self.is_losing_or_drawing_with_more_corners(match)
+                    is_relevant, reason = self.is_losing_with_corner_advantage(match)
                     if is_relevant:
                         match['filter_reason'] = reason # Añadir el motivo para mostrarlo
                         filtered_matches.append(match)
@@ -760,6 +827,9 @@ class NowGoalScraper:
                         telegram_chat_id = "-1002739074153"
 
                     if telegram_bot_token and telegram_chat_id:
+                        # Mostrar estado del historial antes de procesar
+                        self.show_sent_matches_status()
+                        
                         # Filtrar solo partidos que no han sido enviados
                         unsent_matches = self.filter_unsent_matches(filtered_matches)
                         
@@ -790,14 +860,15 @@ class NowGoalScraper:
 
 def main():
     """Función principal"""
-    print("=" * 50)
-    print("   WEB SCRAPER NOWGOAL.COM")
-    print("   (Equipo empatado/perdiendo con más/igual córners, Min. 30-60)")
-    print("=" * 50)
-
-    # Configura los minutos de filtro aquí
+    # Configura los filtros aquí
     MIN_MINUTE_FILTER = 30
     MAX_MINUTE_FILTER = 60
+    MIN_CORNERS_FILTER = 4  # Número mínimo de córners que debe tener el equipo perdiendo
+
+    print("=" * 50)
+    print("   WEB SCRAPER NOWGOAL.COM")
+    print(f"   (Equipo perdiendo por máximo 1 gol con ≥{MIN_CORNERS_FILTER} córners, Min. {MIN_MINUTE_FILTER}-{MAX_MINUTE_FILTER})")
+    print("=" * 50)
 
     # Detectar si estamos en GitHub Actions para usar modo headless
     is_github_actions = os.getenv('GITHUB_ACTIONS', 'false').lower() == 'true'
@@ -805,7 +876,8 @@ def main():
     scraper = NowGoalScraper(
         headless=is_github_actions,  # Headless en GitHub Actions, con ventana en local
         min_minute=MIN_MINUTE_FILTER,
-        max_minute=MAX_MINUTE_FILTER
+        max_minute=MAX_MINUTE_FILTER,
+        min_corners=MIN_CORNERS_FILTER
     )
 
     # Opción para resetear el historial de partidos enviados
